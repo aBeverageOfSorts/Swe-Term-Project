@@ -1,0 +1,7 @@
+{
+  "server": "localhost",
+  "port": 3306,
+  "database": "last_chance",
+  "user": "lastchance_game",
+  "password": "CHANGE_ME"
+}
