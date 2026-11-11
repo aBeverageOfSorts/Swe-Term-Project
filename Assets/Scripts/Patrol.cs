@@ -7,8 +7,10 @@
  * Put all transforms inside the array thing that shows up inside the Unity Inspector, under the script header.
  * Customize the stats if you wish.
  * Then run the script.
- * NOTE: This script does NOT check for collision.
+ * NOTE: This script does NOT yet check for collision.
  */
+
+// TODO: Code and implement police officer vision and collision = gameover.
 using UnityEngine;
 
 public class Patrol : MonoBehaviour
@@ -24,6 +26,19 @@ public class Patrol : MonoBehaviour
     // Integer describing how far away the sprite must approach the waypoint before it has been considered as reached.
     public float tolerance = 3.0f;
 
+    // This is a boolean that controls whether patrol behavior should happen. Controlled by GameManagerScript. Read only.
+    public bool active = true;
+
+    // This variable is used to detect if the player is touching the sightline. Please do not modify it except to point to the sight object.
+    public GameObject sight;
+
+    // This variable shall control the state of the officer.
+    /*
+        * 0 = Calm state, the officer is patrolling. 
+        * 1 = Alert state, the officer is chasing.
+     */
+    private int state = 0;
+
     // Integer describing which waypoint in the array that the officer will try to move towards.
     private int dest = 0;
     
@@ -36,6 +51,16 @@ public class Patrol : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        if (!active)
+        {
+            return;
+        }
+
+        if (false)
+        {
+            state = 1;
+        }
+        
         // If the number of waypoints is empty.
         if(waypoints.Length == 0)
         {
