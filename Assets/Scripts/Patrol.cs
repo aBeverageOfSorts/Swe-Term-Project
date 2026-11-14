@@ -12,6 +12,7 @@
 
 // TODO: Code and implement police officer vision and collision = gameover.
 using UnityEngine;
+using UnityEngine.Animations;
 
 public class Patrol : MonoBehaviour
 {
@@ -30,7 +31,10 @@ public class Patrol : MonoBehaviour
     public bool active = true;
 
     // This variable is used to detect if the player is touching the sightline. Please do not modify it except to point to the sight object.
-    public GameObject sight;
+    public Transform sight;
+
+    // This variable stores information about if the player collided with the sight object. Read only.
+    public bool coll_state;
 
     // This variable shall control the state of the officer.
     /*
@@ -41,11 +45,19 @@ public class Patrol : MonoBehaviour
 
     // Integer describing which waypoint in the array that the officer will try to move towards.
     private int dest = 0;
+
+    // Variable that should be set to the player Transform.
+    private Transform player;
+
+    // Variable used to wait for a certain amount of time.
+    private float timer;
+    public float attentionSpan = 0.5F;
     
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
-        // Don't really need to do anything here.
+        player = GameObject.Find("Player").transform;
+        sight = transform.Find("Sight");
     }
 
     // Update is called once per frame
@@ -55,12 +67,34 @@ public class Patrol : MonoBehaviour
         {
             return;
         }
-
-        if (false)
+        
+        // Function to record the time the player entered the sight cone.
+        if(coll_state && timer == 0 && state == 0)
         {
-            state = 1;
+            timer = Time.time;
+        }
+        // Function to record the time the player exited the sight cone.
+        if(!coll_state && timer == 0 && state == 1)
+        {
+            timer = Time.time;
         }
         
+        // Function to wait for a certain amount of time until after the player is seen to pursue them or ignore them.
+        if(timer != 0 && (Time.time - timer > attentionSpan))
+        {
+            timer = 0;
+            if(state == 0 && coll_state)
+            {
+                state = 1;
+                //Debug.Log("Toggling to attack mode");
+            }
+            else
+            {
+                state = 0;
+                //Debug.Log("Toggling to patrol mode");
+            }
+        }
+
         // If the number of waypoints is empty.
         if(waypoints.Length == 0)
         {
@@ -73,14 +107,24 @@ public class Patrol : MonoBehaviour
         
         float step = speed * Time.deltaTime;
 
-        // Take a step towards the destination.
-        transform.position = Vector2.MoveTowards(transform.position, waypoints[dest].position, step);
-
+        if (state == 0)
+        {
+            // Take a step towards the destination.
+            transform.position = Vector2.MoveTowards(transform.position, waypoints[dest].position, step);
+            transform.rotation = Quaternion.FromToRotation(Vector3.up, waypoints[dest].position - transform.position);
+        }
 
         // If we are close to the destination, set a new destination.
-        if(Vector2.Distance(transform.position, waypoints[dest].position) < tolerance)
+        if(state == 0 && Vector2.Distance(transform.position, waypoints[dest].position) < tolerance)
         {
             dest = (dest + 1) % waypoints.Length;
+        }
+
+        // Pursuit time.
+        if(state == 1)
+        {
+            transform.rotation = Quaternion.FromToRotation(Vector3.up, player.position - transform.position);
+            transform.position = Vector2.MoveTowards(transform.position, player.position, step);
         }
     }
 }
