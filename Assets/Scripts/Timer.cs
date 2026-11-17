@@ -4,7 +4,7 @@ using UnityEngine.UI;
 public class Timer : MonoBehaviour
 {
     public Text txt;
-    // Please do not attempt to overwrite this variable.
+    //dont overwrite these variables
     private float time;
 
     public float GetTime()
@@ -12,17 +12,19 @@ public class Timer : MonoBehaviour
         return time;
     }
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    //start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
 
     }
 
-    // Update is called once per frame
+    //update is called once per frame
     void Update()
-    {
-        // Do not use real time because real time is unaffected by timescale.
-        time = Time.time;
+    {   
+        //guys dont change these lines
+        //dont use real time because real time is unaffected by timescale
+        //using timeSinceLevelLoad so time on the login screen doesnt count
+        time = Time.timeSinceLevelLoad;
         txt.text = "Time since game started: " + time.ToString();
     }
 }

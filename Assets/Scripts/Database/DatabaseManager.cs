@@ -11,7 +11,7 @@ public struct LeaderboardEntry
     public int FinishTimeMs;
     public DateTime AchievedAt;
 
-    /// <summary>Formats as m:ss.mmm for display.</summary>
+    //shows the time as m:ss.mmm
     public string FormattedTime => TimeSpan.FromMilliseconds(FinishTimeMs).ToString(@"m\:ss\.fff");
 }
 
@@ -22,11 +22,35 @@ public struct PlayerSession
     public bool IsAdmin;
 }
 
-/// <summary>
-/// All MariaDB access for Last Chance. Every query is parameterized (no string-built SQL).
-/// Call from MonoBehaviours with await, e.g.
-///   var top = await DatabaseManager.Instance.GetLeaderboardAsync();
-/// </summary>
+//one account for the admin screen
+public struct AdminPlayerRow
+{
+    public int PlayerId;
+    public string Username;
+    public bool IsAdmin;
+    public DateTime CreatedAt;
+    public int RunCount;
+}
+
+//one run for the admin screen
+public struct AdminRunRow
+{
+    public int RunId;
+    public string Username;
+    public int FinishTimeMs;
+    public DateTime AchievedAt;
+
+    public string FormattedTime => TimeSpan.FromMilliseconds(FinishTimeMs).ToString(@"m\:ss\.fff");
+}
+
+//thrown when someone who isnt an admin tries to do admin stuff
+public class NotAdminException : Exception
+{
+    public NotAdminException() : base("This account is not an administrator.") { }
+}
+
+//all the database stuff for the game, every query uses parameters so no sql injection
+//use it with await, ex: var top = await DatabaseManager.Instance.GetLeaderboardAsync();
 public class DatabaseManager
 {
     static DatabaseManager _instance;
@@ -54,7 +78,7 @@ public class DatabaseManager
         return conn;
     }
 
-    /// <summary>Quick connectivity check for a startup screen or debug button.</summary>
+    //quick check that we can connect
     public async Task<bool> TestConnectionAsync()
     {
         try
@@ -69,9 +93,9 @@ public class DatabaseManager
         }
     }
 
-    // ---------- Accounts (data side of registration / login / admin gate) ----------
+    //accounts
 
-    /// <summary>Returns false if the username is already taken.</summary>
+    //false if the username is taken
     public async Task<bool> RegisterPlayerAsync(string username, string password)
     {
         await using var conn = await OpenAsync();
@@ -90,7 +114,7 @@ public class DatabaseManager
         }
     }
 
-    /// <summary>Returns the session on success, or null on bad username/password.</summary>
+    //null if the username or password is wrong
     public async Task<PlayerSession?> LoginAsync(string username, string password)
     {
         await using var conn = await OpenAsync();
@@ -110,9 +134,9 @@ public class DatabaseManager
         };
     }
 
-    // ---------- Runs & leaderboard ----------
+    //runs and leaderboard
 
-    /// <summary>Records a completed escape. achieved_at is set by the server clock.</summary>
+    //saves a finished run, the db sets the date
     public async Task SubmitRunAsync(int playerId, int finishTimeMs)
     {
         await using var conn = await OpenAsync();
@@ -123,7 +147,7 @@ public class DatabaseManager
         await cmd.ExecuteNonQueryAsync();
     }
 
-    /// <summary>Top 8, one entry per player (personal bests).</summary>
+    //top 8, only each players best time
     public async Task<List<LeaderboardEntry>> GetLeaderboardAsync()
     {
         var results = new List<LeaderboardEntry>();
@@ -143,7 +167,7 @@ public class DatabaseManager
         return results;
     }
 
-    /// <summary>A player's best time, or null if they've never finished.</summary>
+    //players best time, null if they never finished
     public async Task<int?> GetPersonalBestAsync(int playerId)
     {
         await using var conn = await OpenAsync();
@@ -153,9 +177,124 @@ public class DatabaseManager
         object result = await cmd.ExecuteScalarAsync();
         return result is DBNull or null ? null : Convert.ToInt32(result);
     }
+
+    //admin stuff
+    //every admin method checks is_admin in the db first so someone who got demoted cant keep using it
+
+    async Task RequireAdminAsync(MySqlConnection conn, int adminId)
+    {
+        await using var cmd = new MySqlCommand(
+            "SELECT is_admin FROM players WHERE player_id = @a", conn);
+        cmd.Parameters.AddWithValue("@a", adminId);
+        object result = await cmd.ExecuteScalarAsync();
+        if (result is DBNull or null || !Convert.ToBoolean(result)) throw new NotAdminException();
+    }
+
+    //checks the db directly instead of the saved session
+    public async Task<bool> IsAdminAsync(int playerId)
+    {
+        await using var conn = await OpenAsync();
+        try { await RequireAdminAsync(conn, playerId); return true; }
+        catch (NotAdminException) { return false; }
+    }
+
+    //all accounts, admins first then a-z
+    public async Task<List<AdminPlayerRow>> AdminGetPlayersAsync(int adminId)
+    {
+        await using var conn = await OpenAsync();
+        await RequireAdminAsync(conn, adminId);
+
+        await using var cmd = new MySqlCommand(
+            @"SELECT p.player_id, p.username, p.is_admin, p.created_at, COUNT(r.run_id) AS run_count
+              FROM players p LEFT JOIN runs r ON r.player_id = p.player_id
+              GROUP BY p.player_id, p.username, p.is_admin, p.created_at
+              ORDER BY p.is_admin DESC, p.username", conn);
+        var rows = new List<AdminPlayerRow>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            rows.Add(new AdminPlayerRow
+            {
+                PlayerId = reader.GetInt32("player_id"),
+                Username = reader.GetString("username"),
+                IsAdmin = reader.GetBoolean("is_admin"),
+                CreatedAt = reader.GetDateTime("created_at"),
+                RunCount = reader.GetInt32("run_count"),
+            });
+        }
+        return rows;
+    }
+
+    //all runs, fastest first
+    public async Task<List<AdminRunRow>> AdminGetRunsAsync(int adminId, int limit = 100)
+    {
+        await using var conn = await OpenAsync();
+        await RequireAdminAsync(conn, adminId);
+
+        await using var cmd = new MySqlCommand(
+            @"SELECT r.run_id, p.username, r.finish_time_ms, r.achieved_at
+              FROM runs r JOIN players p ON p.player_id = r.player_id
+              ORDER BY r.finish_time_ms, r.achieved_at
+              LIMIT @lim", conn);
+        cmd.Parameters.AddWithValue("@lim", limit);
+        var rows = new List<AdminRunRow>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            rows.Add(new AdminRunRow
+            {
+                RunId = reader.GetInt32("run_id"),
+                Username = reader.GetString("username"),
+                FinishTimeMs = reader.GetInt32("finish_time_ms"),
+                AchievedAt = reader.GetDateTime("achieved_at"),
+            });
+        }
+        return rows;
+    }
+
+    //deletes a run (like a cheated time), false if it was already gone
+    public async Task<bool> AdminDeleteRunAsync(int adminId, int runId)
+    {
+        await using var conn = await OpenAsync();
+        await RequireAdminAsync(conn, adminId);
+
+        await using var cmd = new MySqlCommand("DELETE FROM runs WHERE run_id = @r", conn);
+        cmd.Parameters.AddWithValue("@r", runId);
+        return await cmd.ExecuteNonQueryAsync() > 0;
+    }
+
+    //make or remove an admin, cant change your own so nobody locks themselves out
+    public async Task<bool> AdminSetAdminAsync(int adminId, int targetPlayerId, bool makeAdmin)
+    {
+        if (adminId == targetPlayerId)
+            throw new InvalidOperationException("You can't change your own admin status.");
+
+        await using var conn = await OpenAsync();
+        await RequireAdminAsync(conn, adminId);
+
+        await using var cmd = new MySqlCommand(
+            "UPDATE players SET is_admin = @v WHERE player_id = @p", conn);
+        cmd.Parameters.AddWithValue("@v", makeAdmin);
+        cmd.Parameters.AddWithValue("@p", targetPlayerId);
+        return await cmd.ExecuteNonQueryAsync() > 0;
+    }
+
+    //deletes the account and all its runs, cant delete yourself
+    public async Task<bool> AdminDeletePlayerAsync(int adminId, int targetPlayerId)
+    {
+        if (adminId == targetPlayerId)
+            throw new InvalidOperationException("You can't delete your own account.");
+
+        await using var conn = await OpenAsync();
+        await RequireAdminAsync(conn, adminId);
+
+        await using var cmd = new MySqlCommand("DELETE FROM players WHERE player_id = @p", conn);
+        cmd.Parameters.AddWithValue("@p", targetPlayerId);
+        return await cmd.ExecuteNonQueryAsync() > 0;
+    }
 }
 
-/// <summary>PBKDF2-SHA256 password hashing. Stored as "iterations.salt.hash" (base64).</summary>
+//password hashing (PBKDF2), saved as iterations.salt.hash
 static class PasswordHasher
 {
     const int Iterations = 100_000;
@@ -178,7 +317,7 @@ static class PasswordHasher
         byte[] expected = Convert.FromBase64String(parts[2]);
         byte[] actual = Derive(password, salt, iters);
 
-        // Constant-time compare
+        //compare every byte so timing doesnt give anything away
         int diff = expected.Length ^ actual.Length;
         for (int i = 0; i < Math.Min(expected.Length, actual.Length); i++) diff |= expected[i] ^ actual[i];
         return diff == 0;
