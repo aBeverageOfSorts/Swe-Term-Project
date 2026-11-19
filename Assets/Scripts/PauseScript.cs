@@ -9,16 +9,21 @@ public class PauseScript : MonoBehaviour
 
     // Variable to control whether the player may pause the game or not.
     public bool active = true;
+
+    // Variable for GameManager script.
+    private GameManagerScript gm;
     
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         PauseMenu.SetActive(false);
+        gm = GameObject.FindAnyObjectByType<GameManagerScript>();
     }
 
     // Update is called once per frame
     void Update()
     {
+        active = gm.active;
         if (Input.GetKeyDown(KeyCode.Escape) && active)
         {
             isPaused = !isPaused;

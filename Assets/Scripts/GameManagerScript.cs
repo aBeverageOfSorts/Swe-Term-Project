@@ -35,6 +35,10 @@ public class GameManagerScript : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        if (!active)
+        {
+            return;
+        }
         if (win)
         {
             gameState = 2;
@@ -42,6 +46,7 @@ public class GameManagerScript : MonoBehaviour
         }
         else if (death)
         {
+            Debug.Log("Game over");
             gameState = 3;
             active = false;
         }
@@ -54,6 +59,11 @@ public class GameManagerScript : MonoBehaviour
         {
             gameState = 1;
             active = true;
+        }
+
+        if(active == false)
+        {
+            Time.timeScale = 0;
         }
     }
 }

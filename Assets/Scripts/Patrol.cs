@@ -10,7 +10,8 @@
  * NOTE: This script does NOT yet check for collision.
  */
 
-// TODO: Code and implement police officer vision and collision = gameover.
+// TODO: collision = gameover.
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.Animations;
 
@@ -51,18 +52,24 @@ public class Patrol : MonoBehaviour
 
     // Variable used to wait for a certain amount of time.
     private float timer;
+
+    // Variable that controls how long the player must be inside the offier's sight before the officer switches states.
     public float attentionSpan = 0.5F;
-    
+
+    private GameManagerScript gm;
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         player = GameObject.Find("Player").transform;
         sight = transform.Find("Sight");
+        gm = GameObject.FindFirstObjectByType<GameManagerScript>();
     }
 
     // Update is called once per frame
     void Update()
     {
+        active = gm.active;
         if (!active)
         {
             return;
@@ -72,11 +79,13 @@ public class Patrol : MonoBehaviour
         if(coll_state && timer == 0 && state == 0)
         {
             timer = Time.time;
+            //Debug.Log("Player spotted.");
         }
         // Function to record the time the player exited the sight cone.
         if(!coll_state && timer == 0 && state == 1)
         {
             timer = Time.time;
+            //Debug.Log("Player lost.");
         }
         
         // Function to wait for a certain amount of time until after the player is seen to pursue them or ignore them.
@@ -126,5 +135,11 @@ public class Patrol : MonoBehaviour
             transform.rotation = Quaternion.FromToRotation(Vector3.up, player.position - transform.position);
             transform.position = Vector2.MoveTowards(transform.position, player.position, step);
         }
+    }
+
+    private void OnTriggerEnter2D(Collider2D collision)
+    {
+        Debug.Log("Player touched.");
+        gm.death = true;
     }
 }
