@@ -37,12 +37,12 @@ public class Patrol : MonoBehaviour
     // This variable stores information about if the player collided with the sight object. Read only.
     public bool coll_state;
 
-    // This variable shall control the state of the officer.
+    // This variable shall control the state of the officer. Please do not modify from Inspector.
     /*
         * 0 = Calm state, the officer is patrolling. 
         * 1 = Alert state, the officer is chasing.
      */
-    private int state = 0;
+    public int state = 0;
 
     // Integer describing which waypoint in the array that the officer will try to move towards.
     private int dest = 0;
@@ -139,7 +139,9 @@ public class Patrol : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        Debug.Log("Player touched.");
-        gm.death = true;
+        if (collision.transform.name == "Player" && gm.active)
+        {
+            gm.death = true;
+        }
     }
 }

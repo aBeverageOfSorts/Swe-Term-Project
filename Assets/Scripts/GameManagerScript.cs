@@ -41,6 +41,7 @@ public class GameManagerScript : MonoBehaviour
         }
         if (win)
         {
+            Debug.Log("You win!");
             gameState = 2;
             active = false;
         }
